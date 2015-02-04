@@ -41,7 +41,6 @@ install:
 	$(INSTALL) -m 755 avrspi $(DESTDIR)/usr/local/bin/
 	$(INSTALL) -m 755 avrspi_cmd $(DESTDIR)/usr/local/bin/
 	$(INSTALL) -m 755 websockify/websockify $(DESTDIR)/usr/local/bin/
-	$(MAKE) -C remote/ install
 
 clean:
 	cd websockify && $(MAKE) clean
