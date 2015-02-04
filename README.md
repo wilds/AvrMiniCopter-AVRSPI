@@ -1,8 +1,8 @@
-# AvrMiniCopter-AvrSpi
+# AvrMiniCopter-AVRSPI
 
-AvrSpi provides a TCP/UDP service for clients to connect to in order to communicate with the controller (AvrMiniCopter-Arduino). It is mainly used to query current status, issue target position request, forward altitude reading etc.
+AVRSPI provides a TCP/UDP service for clients to connect to in order to communicate with the controller (AvrMiniCopter-Arduino). It is mainly used to query current status, issue target position request, forward altitude reading etc.
 
-By default AvrSpi binds to UDP and TCP port 1030.
+By default AVRSPI binds to UDP and TCP port 1030.
 
 #### TCP/UDP message structure
 Each message is of a fixed length - 4 bytes:
@@ -21,7 +21,7 @@ Control (for outgoing messages):
 - 1: disconnect request
 
 Type:
-- messages with type 0 will be handled by AvrSpi
+- messages with type 0 will be handled by AVRSPI
   Values:
    - 0: dummy message
    - 1: reset backend and initiate autoconfig
