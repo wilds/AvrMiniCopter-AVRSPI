@@ -55,7 +55,9 @@ struct timespec udp_time_prev;
 /* UDP END */
 
 /* UNIX */
-int sock[MAX_UNIX_CLIENTS+1]; 
+int unix_sock;
+int sock[MAX_UNIX_CLIENTS]; 
+int8_t sock_type[MAX_UNIX_CLIENTS];
 struct sockaddr_un local;
 int locallen;
 unsigned char buf[MAX_UNIX_CLIENTS][BUF_SIZE]; //input tcp buffer for each client
@@ -355,15 +357,17 @@ int main(int argc, char **argv)
 	signal(SIGTERM, catch_signal);
 	signal(SIGINT, catch_signal);
 
-	for (i=0; i<MAX_UNIX_CLIENTS+1; i++) { 
+	unix_sock = 0;
+	for (i=0; i<MAX_UNIX_CLIENTS; i++) { 
 		sock[i] = 0;
+		sock_type[i] = -1;
 		if (i>0) {
-			buf_c[i-1] = 0;
+			buf_c[i] = 0;
 		}
 	}
 
-	sock[0] = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (sock[0] < 0) {
+	unix_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (unix_sock < 0) {
 		perror("opening unix socket");
 		exit(1);
 	}
@@ -394,7 +398,7 @@ int main(int argc, char **argv)
 	strcpy(local.sun_path, socket_path);
 	unlink(local.sun_path);
 	locallen = strlen(local.sun_path) + sizeof(local.sun_family);
-	if (bind(sock[0], (struct sockaddr *) &local, locallen)) {
+	if (bind(unix_sock, (struct sockaddr *) &local, locallen)) {
 		perror("binding unix socket");
 		exit(1);
 	}
@@ -403,7 +407,7 @@ int main(int argc, char **argv)
 	flog_init(CFG_PATH);
 	log_mode = flog_getmode();
 
-	if (listen(sock[0],3) < 0) {
+	if (listen(unix_sock,3) < 0) {
 		perror("listen");
 		stop=1;
 	}
@@ -433,8 +437,9 @@ int main(int argc, char **argv)
 
 	while (!stop) {
 		FD_ZERO(&readfds);
-		max_fd = 0;
-		for (i=0;i<MAX_UNIX_CLIENTS+1;i++) {
+		max_fd = unix_sock;
+		FD_SET(unix_sock, &readfds);
+		for (i=0;i<MAX_UNIX_CLIENTS;i++) {
 			if (sock[i]<=0) continue;
 			FD_SET(sock[i], &readfds);
 			max_fd = sock[i]>max_fd?sock[i]:max_fd;
@@ -488,17 +493,18 @@ int main(int argc, char **argv)
 		}
 
 		//If something happened on the master socket , then its an incoming connection
-		if (!stop && FD_ISSET(sock[0], &readfds)) {
-			int t = accept(sock[0], NULL, NULL);
+		if (!stop && FD_ISSET(unix_sock, &readfds)) {
+			int t = accept(unix_sock, NULL, NULL);
 			if (t<0) {
 				perror("accept");
 				continue;
 			}
 			for (i=0;i<MAX_UNIX_CLIENTS;i++)
-				if (sock[i+1] == 0) {
+				if (sock[i] == 0) {
 					if (verbose) printf("Incoming client: %i\n",i);
-					sock[i+1] = t;
-					buf_c[i+1] = 0;
+					sock[i] = t;
+					sock_type[i] = -1;
+					buf_c[i] = 0;
 					break;
 				}
 			if (i==MAX_UNIX_CLIENTS) {
@@ -507,17 +513,22 @@ int main(int argc, char **argv)
 			}
 		} 
 		for (i=0;(i<MAX_UNIX_CLIENTS) && (!stop);i++) {
-			if (FD_ISSET(sock[i+1], &readfds)) {
-				ret = read(sock[i+1] , buf[i]+buf_c[i], BUF_SIZE - buf_c[i]); 
+			if (FD_ISSET(sock[i], &readfds)) {
+				if (sock_type[i]==-1) {
+					read(sock[i],&sock_type,1);
+					continue;
+				}
+				ret = read(sock[i] , buf[i]+buf_c[i], BUF_SIZE - buf_c[i]); 
 				if (ret < 0) {
 					perror("Reading error");
-					close(sock[i+1]);
-					sock[i+1] = 0;
+					close(sock[i]);
+					sock[i] = 0;
 				}
 				else if (ret == 0) {	//client disconnected
 					if (verbose) printf("Client %i disconnected.\n",i);
-					close(sock[i+1]);
-					sock[i+1] = 0;
+					close(sock[i]);
+					sock[i] = 0;
+					sock_type[i] = -1;
 					buf_c[i] = 0;
 				} else { //got data
 					buf_c[i] += ret;
@@ -548,12 +559,12 @@ int main(int argc, char **argv)
 		if (local_buf_c) {
 			if (verbose) printf("To clients msgs: %i bytes: %i\n",local_buf_c,local_buf_c*LOCAL_MSG_SIZE);
 			for (int k=0;k<MAX_UNIX_CLIENTS;k++) {
-				if (sock[k+1]!=0) { 
-					ret = send(sock[k+1], bufout, local_buf_c*LOCAL_MSG_SIZE, MSG_NOSIGNAL );
+				if (sock[k]!=0 && sock_type[k]==0) { 
+					ret = send(sock[k], bufout, local_buf_c*LOCAL_MSG_SIZE, MSG_NOSIGNAL );
 					if (ret == -1) {
 						if (verbose) printf("Lost connection to client %i.\n",k);
-						close(sock[k+1]);
-						sock[k+1] = 0;
+						close(sock[k]);
+						sock[k] = 0;
 					}
 				}
 			}
@@ -590,10 +601,11 @@ int main(int argc, char **argv)
 
 	bufout[0] = 1; //disconnect msg
 	for (int k=0;k<MAX_UNIX_CLIENTS;k++) {
-		if (sock[k+1]!=0) 
-			send(sock[k+1], bufout, LOCAL_MSG_SIZE, MSG_NOSIGNAL );
+		if (sock[k]!=0) 
+			send(sock[k], bufout, LOCAL_MSG_SIZE, MSG_NOSIGNAL );
 	}
 
+	close(unix_sock);
 	mssleep(1000);
 
 	if (verbose) {
@@ -601,8 +613,9 @@ int main(int argc, char **argv)
 		fflush(NULL);
 	}
 
-	for (i=0;i<MAX_UNIX_CLIENTS+1;i++)
+	for (i=0;i<MAX_UNIX_CLIENTS;i++)
 		if (sock[i]!=0) close(sock[i]);
+
 
 	close(usock);
 

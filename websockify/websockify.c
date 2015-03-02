@@ -37,6 +37,7 @@ char USAGE[] = "Usage: [options] " \
                "  --verbose|-v       verbose messages and per frame traffic\n" \
                "  --daemon|-D        become a daemon (background process)\n" \
                "  -u SOCKET          use UNIX socket\n" \
+               "  -a                 AVRSPI mode\n" \
                "  --cert CERT        SSL certificate file\n" \
                "  --key KEY          SSL key file (if separate from cert)\n" \
                "  --ssl-only         disallow non-encrypted connections";
@@ -48,6 +49,7 @@ char USAGE[] = "Usage: [options] " \
 
 char target_host[256];
 int target_port;
+int avrspi;
 
 extern pipe_error;
 extern settings_t settings;
@@ -237,6 +239,7 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
 void proxy_handler(ws_ctx_t *ws_ctx) {
     int tsock = 0;
     struct sockaddr_in taddr;
+    unsigned char sock_type = 0;
 
     handler_msg("connecting to: %s:%d\n", target_host, target_port);
 
@@ -263,6 +266,8 @@ void proxy_handler(ws_ctx_t *ws_ctx) {
         return;
     }
 
+    if (avrspi) write(tsock,&sock_type,1); 
+
     if ((settings.verbose) && (! settings.daemon)) {
         printf("%s", traffic_legend);
     }
@@ -277,6 +282,7 @@ void proxy_handler_unix(ws_ctx_t *ws_ctx) {
     int tsock = 0;
     struct sockaddr_un taddr;
     int len;
+    unsigned char sock_type = 0;
 
     handler_msg("connecting to: %s\n", target_host);
 
@@ -297,6 +303,8 @@ void proxy_handler_unix(ws_ctx_t *ws_ctx) {
         close(tsock);
         return;
     }
+    
+    if (avrspi) write(tsock,&sock_type,1); 
 
     if ((settings.verbose) && (! settings.daemon)) {
         printf("%s", traffic_legend);
@@ -325,6 +333,8 @@ int main(int argc, char *argv[])
         {0, 0, 0, 0}
     };
 
+    avrspi = 0;
+
     settings.cert = realpath("self.pem", NULL);
     if (!settings.cert) {
         /* Make sure it's always set to something */
@@ -333,7 +343,7 @@ int main(int argc, char *argv[])
     settings.key = "";
 
     while (1) {
-        c = getopt_long (argc, argv, "vDrc:k:u:",
+        c = getopt_long (argc, argv, "avDrc:k:u:",
                          long_options, &option_index);
 
         /* Detect the end */
@@ -344,6 +354,9 @@ int main(int argc, char *argv[])
                 break; // ignore
             case 1:
                 break; // ignore
+	    case 'a': 
+		avrspi = 1;
+		break;
             case 'v':
                 verbose = 1;
                 break;

@@ -105,6 +105,11 @@ int main(int argc, char **argv)
 		printf("Check if avrspi is running\n");
 		exit(1);
 	}
+
+	if (listen) buf[0] = 0;
+	else buf[0] = 1;
+	write(sock,buf,1);
+ 
 	if (c) {
 		printf("Sending message t: %u v: %i\n",msg.t,msg.v);
 		msg.c = 0;	
