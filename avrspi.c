@@ -512,10 +512,15 @@ int main(int argc, char **argv)
 				close(t);
 			}
 		} 
-		for (i=0;(i<MAX_UNIX_CLIENTS) && (!stop);i++) {
+		for (i=0;(i<MAX_UNIX_CLIENTS) && (!stop) && sock[i]>0;i++) {
 			if (FD_ISSET(sock[i], &readfds)) {
 				if (sock_type[i]==-1) {
-					read(sock[i],&sock_type,1);
+					ret = read(sock[i],&sock_type[i],1);
+					if (ret<=0) {
+						perror("Reading error");
+						close(sock[i]);
+						sock[i] = 0;
+					}
 					continue;
 				}
 				ret = read(sock[i] , buf[i]+buf_c[i], BUF_SIZE - buf_c[i]); 
@@ -528,7 +533,6 @@ int main(int argc, char **argv)
 					if (verbose) printf("Client %i disconnected.\n",i);
 					close(sock[i]);
 					sock[i] = 0;
-					sock_type[i] = -1;
 					buf_c[i] = 0;
 				} else { //got data
 					buf_c[i] += ret;

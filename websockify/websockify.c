@@ -49,7 +49,6 @@ char USAGE[] = "Usage: [options] " \
 
 char target_host[256];
 int target_port;
-int avrspi;
 
 extern pipe_error;
 extern settings_t settings;
@@ -266,8 +265,6 @@ void proxy_handler(ws_ctx_t *ws_ctx) {
         return;
     }
 
-    if (avrspi) write(tsock,&sock_type,1); 
-
     if ((settings.verbose) && (! settings.daemon)) {
         printf("%s", traffic_legend);
     }
@@ -304,8 +301,6 @@ void proxy_handler_unix(ws_ctx_t *ws_ctx) {
         return;
     }
     
-    if (avrspi) write(tsock,&sock_type,1); 
-
     if ((settings.verbose) && (! settings.daemon)) {
         printf("%s", traffic_legend);
     }
@@ -333,8 +328,6 @@ int main(int argc, char *argv[])
         {0, 0, 0, 0}
     };
 
-    avrspi = 0;
-
     settings.cert = realpath("self.pem", NULL);
     if (!settings.cert) {
         /* Make sure it's always set to something */
@@ -343,7 +336,7 @@ int main(int argc, char *argv[])
     settings.key = "";
 
     while (1) {
-        c = getopt_long (argc, argv, "avDrc:k:u:",
+        c = getopt_long (argc, argv, "vDrc:k:u:",
                          long_options, &option_index);
 
         /* Detect the end */
@@ -354,9 +347,6 @@ int main(int argc, char *argv[])
                 break; // ignore
             case 1:
                 break; // ignore
-	    case 'a': 
-		avrspi = 1;
-		break;
             case 'v':
                 verbose = 1;
                 break;
