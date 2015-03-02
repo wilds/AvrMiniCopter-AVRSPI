@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <sys/time.h>
 #include "routines.h"
@@ -21,7 +22,7 @@
 #include "flightlog.h"
 #include "mpu.h"
 
-#define MAX_TCP_CLIENTS 6
+#define MAX_UNIX_CLIENTS 6
 #define MAX_UDP_CLIENTS 6
 
 
@@ -43,6 +44,7 @@ int portno = 1030;
 struct timespec time_now;
 /* UDP */
 #define CLIENT_TIMEOUT 10
+struct sockaddr_in address;
 struct sockaddr_in uaddress[MAX_UDP_CLIENTS];
 int uclients[MAX_UDP_CLIENTS];
 unsigned char ubuf[BUF_SIZE]; //input udp buffer 
@@ -52,12 +54,14 @@ int usock;
 struct timespec udp_time_prev;
 /* UDP END */
 
-/* TCP */
-int sock[MAX_TCP_CLIENTS+1]; 
-struct sockaddr_in address;
-unsigned char buf[MAX_TCP_CLIENTS][BUF_SIZE]; //input tcp buffer for each client
-unsigned short buf_c[MAX_TCP_CLIENTS];
-/* TCP END */
+/* UNIX */
+int sock[MAX_UNIX_CLIENTS+1]; 
+struct sockaddr_un local;
+int locallen;
+unsigned char buf[MAX_UNIX_CLIENTS][BUF_SIZE]; //input tcp buffer for each client
+unsigned short buf_c[MAX_UNIX_CLIENTS];
+char socket_path[256] = "/dev/avrspi";
+/* UNIX END */
 
 /* CONFIG */
 int avrstatus = -1;
@@ -186,7 +190,7 @@ void process_udp_msg(struct local_msg *m, struct sockaddr_in *addr) {
 	}
 }
 
-void process_tcp_queue(int client) {
+void process_socket_queue(int client) {
 	int msg_c = buf_c[client] / LOCAL_MSG_SIZE;
 	int msg_r = buf_c[client] % LOCAL_MSG_SIZE;
 	struct local_msg m;
@@ -307,6 +311,7 @@ void print_usage() {
 	printf("-f do not do SPI (useful for debugging)\n");
 	printf("-v [level] verbose level\n");
 	printf("-p [port] port to listen on (defaults to %i)\n",portno);
+	printf("-u [SOCKET] socket to listen on (defaults to %s)\n",socket_path);
 }
 
 int main(int argc, char **argv)
@@ -333,13 +338,14 @@ int main(int argc, char **argv)
 	verbose = 1;
 	background = 0;
 	echo = 0;
-	while ((option = getopt(argc, argv,"dep:fv:")) != -1) {
+	while ((option = getopt(argc, argv,"dep:fv:u:")) != -1) {
 		switch (option)  {
 			case 'd': background = 1; verbose=0; break;
 			case 'p': portno = atoi(optarg);  break;
 			case 'v': verbose = atoi(optarg);  break;
 			case 'f': spi=0; break;
 			case 'e': echo=1; break;
+			case 'u': strcpy(socket_path,optarg); break;
 			default:
 				  print_usage();
 				  return -1;
@@ -349,16 +355,16 @@ int main(int argc, char **argv)
 	signal(SIGTERM, catch_signal);
 	signal(SIGINT, catch_signal);
 
-	for (i=0; i<MAX_TCP_CLIENTS+1; i++) { 
+	for (i=0; i<MAX_UNIX_CLIENTS+1; i++) { 
 		sock[i] = 0;
 		if (i>0) {
 			buf_c[i-1] = 0;
 		}
 	}
 
-	sock[0] = socket(AF_INET, SOCK_STREAM, 0);
+	sock[0] = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock[0] < 0) {
-		perror("opening stream socket");
+		perror("opening unix socket");
 		exit(1);
 	}
 
@@ -368,17 +374,11 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-
 	/* Create name sock, usock */
 	bzero((char *) &address, sizeof(address));
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(portno);
-
-	if (bind(sock[0], (struct sockaddr *) &address, sizeof(struct sockaddr_in))) {
-		perror("binding stream socket");
-		exit(1);
-	}
 
 	if (bind(usock, (struct sockaddr *) &address, sizeof(struct sockaddr_in))) {
 		perror("binding datagram socket");
@@ -386,6 +386,19 @@ int main(int argc, char **argv)
 	}
 
 	printf("Socket created on port %i\n", portno);
+
+
+	/* UNIX */
+	bzero((char *) &local, sizeof(local));
+	local.sun_family = AF_UNIX;
+	strcpy(local.sun_path, socket_path);
+	unlink(local.sun_path);
+	locallen = strlen(local.sun_path) + sizeof(local.sun_family);
+	if (bind(sock[0], (struct sockaddr *) &local, locallen)) {
+		perror("binding unix socket");
+		exit(1);
+	}
+
 
 	flog_init(CFG_PATH);
 	log_mode = flog_getmode();
@@ -421,7 +434,7 @@ int main(int argc, char **argv)
 	while (!stop) {
 		FD_ZERO(&readfds);
 		max_fd = 0;
-		for (i=0;i<MAX_TCP_CLIENTS+1;i++) {
+		for (i=0;i<MAX_UNIX_CLIENTS+1;i++) {
 			if (sock[i]<=0) continue;
 			FD_SET(sock[i], &readfds);
 			max_fd = sock[i]>max_fd?sock[i]:max_fd;
@@ -476,24 +489,24 @@ int main(int argc, char **argv)
 
 		//If something happened on the master socket , then its an incoming connection
 		if (!stop && FD_ISSET(sock[0], &readfds)) {
-			int t = accept(sock[0], 0, 0);
+			int t = accept(sock[0], NULL, NULL);
 			if (t<0) {
 				perror("accept");
 				continue;
 			}
-			for (i=0;i<MAX_TCP_CLIENTS;i++)
+			for (i=0;i<MAX_UNIX_CLIENTS;i++)
 				if (sock[i+1] == 0) {
 					if (verbose) printf("Incoming client: %i\n",i);
 					sock[i+1] = t;
 					buf_c[i+1] = 0;
 					break;
 				}
-			if (i==MAX_TCP_CLIENTS) {
+			if (i==MAX_UNIX_CLIENTS) {
 				printf("AVRSPI: No space in connection pool! Disconnecting client.\n");
 				close(t);
 			}
 		} 
-		for (i=0;(i<MAX_TCP_CLIENTS) && (!stop);i++) {
+		for (i=0;(i<MAX_UNIX_CLIENTS) && (!stop);i++) {
 			if (FD_ISSET(sock[i+1], &readfds)) {
 				ret = read(sock[i+1] , buf[i]+buf_c[i], BUF_SIZE - buf_c[i]); 
 				if (ret < 0) {
@@ -509,7 +522,7 @@ int main(int argc, char **argv)
 				} else { //got data
 					buf_c[i] += ret;
 					if (verbose) printf("Received: %i bytes. Buf size: %i\n",ret,buf_c[i]);
-					process_tcp_queue(i);
+					process_socket_queue(i);
 				}
 			}
 		}
@@ -534,7 +547,7 @@ int main(int argc, char **argv)
 
 		if (local_buf_c) {
 			if (verbose) printf("To clients msgs: %i bytes: %i\n",local_buf_c,local_buf_c*LOCAL_MSG_SIZE);
-			for (int k=0;k<MAX_TCP_CLIENTS;k++) {
+			for (int k=0;k<MAX_UNIX_CLIENTS;k++) {
 				if (sock[k+1]!=0) { 
 					ret = send(sock[k+1], bufout, local_buf_c*LOCAL_MSG_SIZE, MSG_NOSIGNAL );
 					if (ret == -1) {
@@ -576,7 +589,7 @@ int main(int argc, char **argv)
 	if (echo) spi_close();
 
 	bufout[0] = 1; //disconnect msg
-	for (int k=0;k<MAX_TCP_CLIENTS;k++) {
+	for (int k=0;k<MAX_UNIX_CLIENTS;k++) {
 		if (sock[k+1]!=0) 
 			send(sock[k+1], bufout, LOCAL_MSG_SIZE, MSG_NOSIGNAL );
 	}
@@ -588,7 +601,7 @@ int main(int argc, char **argv)
 		fflush(NULL);
 	}
 
-	for (i=0;i<MAX_TCP_CLIENTS+1;i++)
+	for (i=0;i<MAX_UNIX_CLIENTS+1;i++)
 		if (sock[i]!=0) close(sock[i]);
 
 	close(usock);

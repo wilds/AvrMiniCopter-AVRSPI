@@ -2,7 +2,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <netinet/in.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -25,9 +24,8 @@ int stop = 0;
 void print_usage() {
 	printf("Error. Use -t X for type and -v X for value\n");
 	printf("type is of type uint8_t, value of type int16_t\n");
-	printf("-a [address] address to use (default to 127.0.0.1)\n");
-	printf("-p [port] port to use (defaults to 1030)\n");
 	printf("-l do not disconnect, keep listening\n");
+	printf("-u [SOCKET] socket to connect to\n");
 }
 
 void catch_signal(int sig)
@@ -50,9 +48,8 @@ void processMsg(struct local_msg *m) {
 int main(int argc, char **argv)
 {
 	int sock;
-	struct sockaddr_in address;
-	struct hostent *server;
-	int portno = 1030;
+	struct sockaddr_un address;
+	int len;
 	struct local_msg msg;
 	unsigned char buf1[MAX_BUF]; //receiving buffer
 	char buf2[256];
@@ -64,19 +61,18 @@ int main(int argc, char **argv)
 	int listen = 0;
 	int ret;
 	unsigned char buf[LOCAL_MSG_SIZE];
-	char sock_path[32] = "127.0.0.1";
+	char sock_path[256] = "/dev/avrspi";
 	msg.t = 0;
 	msg.v = 0;
 
 
 	int option;
-	while ((option = getopt(argc, argv,"t:v:p:a:l")) != -1) {
+	while ((option = getopt(argc, argv,"t:v:lu:")) != -1) {
 		switch (option)  {
 			case 't': c++; msg.t = atoi(optarg); break;
 			case 'v': c++; msg.v = atoi(optarg); break;
 			case 'l': listen=1; break;
-			case 'a': strcpy(sock_path,optarg); break;
-			case 'p': portno = atoi(optarg); break;
+			case 'u': strcpy(sock_path,optarg); break;
 			default:
 				  print_usage();
 				  return -1;
@@ -89,26 +85,20 @@ int main(int argc, char **argv)
 	}
 
 	/* Create socket on which to send. */
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock < 0) {
 		perror("opening socket");
 		exit(1);
 	}
-	server = gethostbyname(sock_path);
-	if (server == NULL) {
-		fprintf(stderr,"ERROR, no such host\n");
-		return -1;
-	}
+
 	bzero((char *) &address, sizeof(address));
-	address.sin_family = AF_INET;
-	bcopy((char *)server->h_addr, 
-			(char *)&address.sin_addr.s_addr,
-			server->h_length);
-	address.sin_port = htons(portno);
+	address.sun_family = AF_UNIX;
+	strcpy(address.sun_path, sock_path);
+	len = strlen(address.sun_path) + sizeof(address.sun_family);
 	/* Construct name of socket to send to. */
 	/* Send message. */
 
-	if (connect(sock, (struct sockaddr *) &address, sizeof(struct sockaddr_in)) < 0) {
+	if (connect(sock, (struct sockaddr *) &address, len) < 0) {
 		close(sock);
 		printf("%s\n",sock_path);
 		perror("connecting socket");

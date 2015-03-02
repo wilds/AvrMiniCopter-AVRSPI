@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <getopt.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <sys/select.h>
@@ -35,6 +36,7 @@ char USAGE[] = "Usage: [options] " \
                "[source_addr:]source_port target_addr:target_port\n\n" \
                "  --verbose|-v       verbose messages and per frame traffic\n" \
                "  --daemon|-D        become a daemon (background process)\n" \
+               "  -u SOCKET          use UNIX socket\n" \
                "  --cert CERT        SSL certificate file\n" \
                "  --key KEY          SSL key file (if separate from cert)\n" \
                "  --ssl-only         disallow non-encrypted connections";
@@ -271,11 +273,47 @@ void proxy_handler(ws_ctx_t *ws_ctx) {
     close(tsock);
 }
 
+void proxy_handler_unix(ws_ctx_t *ws_ctx) {
+    int tsock = 0;
+    struct sockaddr_un taddr;
+    int len;
+
+    handler_msg("connecting to: %s\n", target_host);
+
+    tsock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (tsock < 0) {
+        handler_emsg("Could not create target socket: %s\n",
+                     strerror(errno));
+        return;
+    }
+    bzero((char *) &taddr, sizeof(taddr));
+    taddr.sun_family = AF_UNIX;
+    strcpy(taddr.sun_path, target_host);
+    len = strlen(taddr.sun_path) + sizeof(taddr.sun_family);
+
+    if (connect(tsock, (struct sockaddr *) &taddr, len) < 0) {
+        handler_emsg("Could not connect to target: %s\n",
+                     strerror(errno));
+        close(tsock);
+        return;
+    }
+
+    if ((settings.verbose) && (! settings.daemon)) {
+        printf("%s", traffic_legend);
+    }
+
+    do_proxy(ws_ctx, tsock);
+
+    shutdown(tsock, SHUT_RDWR);
+    close(tsock);
+}
+
 int main(int argc, char *argv[])
 {
     int fd, c, option_index = 0;
     static int ssl_only = 0, daemon = 0, run_once = 0, verbose = 0;
     char *found;
+    int unix_socket = 0;
     static struct option long_options[] = {
         {"verbose",    no_argument,       &verbose,    'v'},
         {"ssl-only",   no_argument,       &ssl_only,    1 },
@@ -295,7 +333,7 @@ int main(int argc, char *argv[])
     settings.key = "";
 
     while (1) {
-        c = getopt_long (argc, argv, "vDrc:k:",
+        c = getopt_long (argc, argv, "vDrc:k:u:",
                          long_options, &option_index);
 
         /* Detect the end */
@@ -315,6 +353,10 @@ int main(int argc, char *argv[])
             case 'r':
                 run_once = 1;
                 break;
+	    case 'u':
+		unix_socket = 1;
+		strcpy(target_host,optarg);
+		break;
             case 'c':
                 settings.cert = realpath(optarg, NULL);
                 if (! settings.cert) {
@@ -336,8 +378,14 @@ int main(int argc, char *argv[])
     settings.daemon       = daemon;
     settings.run_once     = run_once;
 
-    if ((argc-optind) != 2) {
-        usage("Invalid number of arguments\n");
+    if (unix_socket) {
+       if ((argc-optind) != 1) {
+           usage("Invalid number of arguments\n");
+       }
+    } else {
+       if ((argc-optind) != 2) {
+           usage("Invalid number of arguments\n");
+       }
     }
 
     found = strstr(argv[optind], ":");
@@ -353,15 +401,17 @@ int main(int argc, char *argv[])
         usage("Could not parse listen_port\n");
     }
 
-    found = strstr(argv[optind], ":");
-    if (found) {
-        memcpy(target_host, argv[optind], found-argv[optind]);
-        target_port = strtol(found+1, NULL, 10);
-    } else {
-        usage("Target argument must be host:port\n");
-    }
-    if (target_port == 0) {
-        usage("Could not parse target port\n");
+    if (!unix_socket) {
+       found = strstr(argv[optind], ":");
+       if (found) {
+           memcpy(target_host, argv[optind], found-argv[optind]);
+           target_port = strtol(found+1, NULL, 10);
+       } else {
+           usage("Target argument must be host:port\n");
+       }
+       if (target_port == 0) {
+           usage("Could not parse target port\n");
+       }
     }
 
     if (ssl_only) {
@@ -379,7 +429,8 @@ int main(int argc, char *argv[])
     //printf("  cert: %s\n",      settings.cert);
     //printf("  key: %s\n",       settings.key);
 
-    settings.handler = proxy_handler; 
+    if (unix_socket) settings.handler = proxy_handler_unix;
+    else settings.handler = proxy_handler; 
     start_server();
 
 }
