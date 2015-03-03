@@ -188,6 +188,9 @@ void process_udp_msg(struct local_msg *m, struct sockaddr_in *addr) {
 			if (m->c==2) ping_back(m,addr);
 			else process_msg(m);
 			break;
+		case 3:
+			local_buf[local_buf_c++] = *m;
+			break;
 		default: printf("Unknown UDP control: %u\n",m->c);
 	}
 }
@@ -561,8 +564,8 @@ int main(int argc, char **argv)
 		}
 
 		for (j=0;j<local_buf_c;j++) {
-			if (verbose>=2) printf("To clients: t: %u v: %i\n",local_buf[j].t,local_buf[j].v);
-			local_buf[j].c = 0;
+			if (verbose>=2) printf("To clients: c: %u, t: %u, v: %i\n",local_buf[j].c,local_buf[j].t,local_buf[j].v);
+			//local_buf[j].c = 0;
 			pack_lm(bufout+j*LOCAL_MSG_SIZE,&local_buf[j]);
 		}
 

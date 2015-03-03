@@ -37,7 +37,6 @@ char USAGE[] = "Usage: [options] " \
                "  --verbose|-v       verbose messages and per frame traffic\n" \
                "  --daemon|-D        become a daemon (background process)\n" \
                "  -u SOCKET          use UNIX socket\n" \
-               "  -a                 AVRSPI mode\n" \
                "  --cert CERT        SSL certificate file\n" \
                "  --key KEY          SSL key file (if separate from cert)\n" \
                "  --ssl-only         disallow non-encrypted connections";

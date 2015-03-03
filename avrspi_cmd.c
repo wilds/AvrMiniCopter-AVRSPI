@@ -46,12 +46,13 @@ void catch_signal(int sig)
 }
 
 void processMsg(struct local_msg *m) {
+	printf("Recieved c: %u, t: %u, v: %i\n",m->c,m->t,m->v);
+
 	if (m->c == 1) {
 		printf("Disconnect request.\n");
 		stop = 1;
-	} else {
-		printf("Recieved t: %u v: %i\n",m->t,m->v);
 	}
+
 }
 
 #define MAX_BUF 64
@@ -255,7 +256,7 @@ int main(int argc, char **argv)
 					ret = sscanf(buf2,"%" SCNu8 "%" SCNi16 "\n",&msg.t,&msg.v);
 					if ((ret == 2) && (b2>3)) {
 						msg.c = 0;
-						printf("Sending t: %u v: %i\n",msg.t,msg.v);
+						printf("Sending c: %u, t: %u v: %i\n",msg.c,msg.t,msg.v);
 						pack_lm(buf,&msg);
 						if (write(sock, buf, LOCAL_MSG_SIZE) < 0)
 							perror("writing");
