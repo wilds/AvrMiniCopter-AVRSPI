@@ -1,6 +1,7 @@
 #!/bin/sh
 if [ "$1" == "start"  ]; then
 /usr/local/bin/avrspi -d
+/usr/local/bin/avrspi_cmd
 /usr/local/bin/websockify -u /dev/avrspi -D 8888 
 fi
 exit 0;

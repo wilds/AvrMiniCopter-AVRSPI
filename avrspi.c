@@ -199,7 +199,13 @@ void process_socket_queue(int client) {
 
 	for (int i=0;i<msg_c;i++) {
 		unpack_lm(buf[client]+i*LOCAL_MSG_SIZE,&m);
-		process_msg(&m);
+		switch (m.c) {
+			case 0: process_msg(&m); break;
+			case 3: 
+				local_buf[local_buf_c++] = m;
+			break;
+			default: printf("Unknown SOCKET control: %u\n",m.c);
+		}
 	}
 
 	if (msg_c) {
