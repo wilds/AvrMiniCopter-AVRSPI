@@ -1,0 +1,43 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          avrspi
+# Required-Start:    $local_fs $syslog $remote_fs $network lighttpd
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Provides a TCP/UDP service for clients to connect to in order to communicate with the controller.
+# Description: Provides a TCP/UDP service for clients to connect to in order to communicate with the controller.
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+case "$1" in
+    start)
+        /usr/local/bin/avrspi -d > /dev/null &
+		/usr/local/bin/avrspi_cmd
+        /usr/local/bin/websockify -u /dev/avrspi -D 8888 > /dev/null &
+        ;;
+    stop)
+        killall avrspi
+		killall avrspi_cmd
+        killall websockify
+        ;;
+    restart)
+        $0 stop
+        $0 start
+        ;;
+    status)
+        if [ -z `pidof avrspi` ] ; then
+                echo "running" >&2
+        else
+                echo "not running" >&2
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,11 +1,11 @@
 CXX=g++
 CXX_OPTS= -Wall -g -O2 -DDEBUG1
-CXXFLAGS=$(CXX_OPTS)
+CXXFLAGS=
 
 CC=cc
 CFLAGS=
 CC_OPTS=-lstdc++ -lm
-LDFLAGS=$(CC_OPTS)
+LDFLAGS=-lrt
 #LDFLAGS=-lpthread -pthread -lstdc++ -lsupc++ 
 #LD_OPTS=-lpthread -lrt -lstdc++
 
@@ -37,10 +37,15 @@ install:
 	$(INSTALL) -m 0755 -d $(DESTDIR)/usr/local/bin
 	$(INSTALL) -m 755 utils/flog.config $(DESTDIR)/etc/avrminicopter/
 	$(INSTALL) -m 755 utils/rpicopter.config $(DESTDIR)/etc/avrminicopter/
-	$(INSTALL) -m 755 utils/S91avrspi $(DESTDIR)/etc/init.d/
+	$(INSTALL) -m 755 utils/avrspi.init $(DESTDIR)/etc/init.d/avrspi
 	$(INSTALL) -m 755 avrspi $(DESTDIR)/usr/local/bin/
 	$(INSTALL) -m 755 avrspi_cmd $(DESTDIR)/usr/local/bin/
 	$(INSTALL) -m 755 websockify/websockify $(DESTDIR)/usr/local/bin/
+	[ -z "$(DESTDIR)" ] && update-rc.d avrspi defaults || :
+
+uninstall:
+	[ -z "$(DESTDIR)" ] && update-rc.d -f avrspi remove || :
+	sudo rm -f $(INSTALLED_FILES)
 
 clean:
 	cd websockify && $(MAKE) clean
