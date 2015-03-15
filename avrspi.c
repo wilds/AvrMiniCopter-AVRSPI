@@ -149,7 +149,7 @@ void process_msg_l(struct local_msg *m) {
 		case 2: autoconfig = 0; reset_avr(); break; 
 		case 3: //get number of SPI errors 
 			struct local_msg lm;
-			lm.t = 253; lm.v=spi_crc_err;
+			lm.c = 0; lm.t = 253; lm.v=spi_crc_err;
 			local_buf[local_buf_c++] = lm;
 			printf("%u %i\n",lm.t,lm.v);
 			break;
