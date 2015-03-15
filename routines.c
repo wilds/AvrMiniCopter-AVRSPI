@@ -45,6 +45,7 @@ void local2avr(struct local_msg *lm, struct avr_msg *am) {
 }
 
 void avr2local(struct avr_msg *am, struct local_msg *lm) {
+	lm->t = 0;
         lm->t = am->t;
         lm->v = am->v;
 }
