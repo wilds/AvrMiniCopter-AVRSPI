@@ -252,8 +252,12 @@ void sendConfig() {
         spi_sendIntPacket(17,config.throttle_min);
         spi_sendIntPacket(18,config.throttle_inflight);
 
-        for (int i=0;i<4;i++)
-                spi_sendIntPacket(5+i,config.motor_pin[i]);
+	uint8_t motor_order = 
+		(config.motor_pin[0]) |
+		(config.motor_pin[1] << 2) |
+		(config.motor_pin[2] << 4) |
+		(config.motor_pin[3] << 6); 
+	spi_sendIntPacket(5,motor_order);
 
         spi_sendIntPacket(69,config.baro_f);
         //PIDS
