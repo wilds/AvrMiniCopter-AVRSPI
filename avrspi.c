@@ -251,6 +251,7 @@ void sendConfig() {
 
         spi_sendIntPacket(17,config.throttle_min);
         spi_sendIntPacket(18,config.throttle_inflight);
+        spi_sendIntPacket(19,config.throttle_midflight);
 
 	uint8_t motor_order = 
 		(config.motor_pin[0]) |
