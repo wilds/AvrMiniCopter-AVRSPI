@@ -241,6 +241,7 @@ void reset_avr() {
 }
 
 void sendConfig() {
+	if (verbose) printf("AVRSPI: Sending config\n");
         spi_sendIntPacket(3,0); //initial mode
         spi_sendIntPacket(2 ,log_mode); //log mode
 
@@ -277,6 +278,7 @@ void sendConfig() {
         spi_sendIntPacket(130,config.a_pid[0]);
 
         spi_sendIntPacket(255,2);
+	if (verbose) printf("AVRSPI: Config sent.\n");
 }
 
 void do_avr_init() {
